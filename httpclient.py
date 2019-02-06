@@ -101,7 +101,8 @@ class HTTPClient(object):
 
     def get_body(self, data):
         """
-
+        input:  http response data
+        return: the response body(content)
         """
         skipLength = 4
         separatePoint = data.find("\r\n\r\n")
@@ -111,13 +112,23 @@ class HTTPClient(object):
         return data[separatePoint+skipLength:]
     
     def sendall(self, data):
+        """
+        input: data need to be sent through socket to the another end host
+        send all data that is given
+        """
         self.socket.sendall(data.encode('utf-8'))
         
     def close(self):
+        """
+        close socket connection
+        """
         self.socket.close()
 
-    # read everything from the socket
     def recvall(self, sock):
+        """
+        input: socket 
+        read   everything from the socket
+        """
         buffer = bytearray()
         done = False
         while not done:
@@ -129,6 +140,10 @@ class HTTPClient(object):
         return buffer
 
     def GETRequestHeader(self, host, URL_components, HttpVersion="HTTP/1.1", charset="UTF-8", connection="close", userAgent=""):
+        """
+        input: all the necessary param for a GET request header (allow customize)
+        generate a GET request header string
+        """
         path = ""
         if host == URL_components.path.split("/")[0]:
             # no protocol scheme  eg: "www.google.com"
@@ -158,6 +173,10 @@ class HTTPClient(object):
 
 
     def readResponse(self, socket):
+        """
+        input:  socket 
+        process the data from socket
+        """
         # recieve all data from the socket
         fullData = self.recvall(socket)
         # make a copy of the data
@@ -183,6 +202,10 @@ class HTTPClient(object):
         
 
     def GET(self, url, args=None):
+        """
+        input: url
+        Handling GET request to given url
+        """
         # url parsing
         URL_components = urllib.parse.urlparse(url)
         # TCP connection
@@ -208,7 +231,7 @@ class HTTPClient(object):
         print("Response body:\n"+body)
         # print(header)
         # print(len(header))
-        return HTTPResponse(code, fullData)
+        return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
         code = 500
