@@ -51,12 +51,12 @@ class HTTPClient(object):
         if URL_components.port == None:
             # if port not given use default http port 80
             port = defaultHttpPort
-        # catch any socket problem just in case
+        # catch any socket connection problem just in case
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((host, port))
         except:
-            print("Connection error => Could not resolve host: {host} port: {port}".format(host=host,port=port))
+            print("Connection Error => Could not resolve host: {host} port: {port}".format(host=host,port=port))
             sys.exit(1)
         print("Successfully connect to: {host}:{port}...".format(host=host, port=port))
         return host
@@ -116,7 +116,12 @@ class HTTPClient(object):
         input: data need to be sent through socket to the another end host
         send all data that is given
         """
-        self.socket.sendall(data.encode('utf-8'))
+        # catch any socket problem
+        try:
+            self.socket.sendall(data.encode('utf-8'))
+        except:
+            print("Socket Send Error => occur when try to send out data to destinated host.")
+            sys.exit(1)
         
     def close(self):
         """
@@ -132,7 +137,12 @@ class HTTPClient(object):
         buffer = bytearray()
         done = False
         while not done:
-            part = sock.recv(1024)
+            # catch any socket problem
+            try:
+                part = sock.recv(1024)
+            except:
+                print("Socket Recv Error => occur when try to send out data to destinated host.")
+                sys.exit(1)
             if (part):
                 buffer.extend(part)
             else:
