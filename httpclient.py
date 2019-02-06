@@ -24,6 +24,9 @@ import re
 # you may use urllib to encode data appropriately
 import urllib.parse
 
+bufferSize = 1024
+defaultHttpPort = 80
+
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
 
@@ -33,21 +36,79 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
-
-    def connect(self, host, port):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((host, port))
-        return None
+    def connect(self, URL_components):
+        """
+        input:  a urlparsed dictionary
+        return: the host that is connected to
+        """
+        # if there protocol scheme is given (not start with "http://")
+        host = URL_components.hostname 
+        if URL_components.hostname == None:
+            # if the protocol scheme is not given 
+            host = URL_components.path.split("/")[0]
+        # if port is given
+        port = URL_components.port
+        if URL_components.port == None:
+            # if port not given use default http port 80
+            port = defaultHttpPort
+        # catch any socket problem just in case
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.connect((host, port))
+        except:
+            print("Connection error => Could not resolve host: {host} port: {port}".format(host=host,port=port))
+            sys.exit(1)
+        print("Successfully connect to: {host}:{port}...".format(host=host, port=port))
+        return host
 
     def get_code(self, data):
-        return None
+        """
+        input:  http response data
+        return: response status code
+        """
+        begin = data.find("HTTP/")
+        if begin != -1:
+            return int(data[begin+9:12])
+        else:
+            return 500
+        
+    def get_first_line_of_header(self, data):
+        """
+        Not used in this assignment
+        input:  http response data
+        return: the first line of response header
+        """
+        begin = data.find("HTTP/")
+        index = begin
+        header = ""
+        while True:
+            if data[index] == "\r" or data[index] == "\n":
+                break
+            header += data[index]
+            index += 1
+        return header
 
-    def get_headers(self,data):
-        return None
+    def get_headers(self, data):
+        """
+        input:  http response data
+        return: the response header
+        """
+        separatePoint = data.find("\r\n\r\n")
+        if separatePoint == -1:
+            separatePoint = data.find("\n\n")
+        return data[0:separatePoint]
+
 
     def get_body(self, data):
-        return None
+        """
+
+        """
+        skipLength = 4
+        separatePoint = data.find("\r\n\r\n")
+        if separatePoint == -1:
+            separatePoint = data.find("\n\n")
+            skipLength = 2
+        return data[separatePoint+skipLength:]
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -65,12 +126,89 @@ class HTTPClient(object):
                 buffer.extend(part)
             else:
                 done = not part
-        return buffer.decode('utf-8')
+        return buffer
+
+    def GETRequestHeader(self, host, URL_components, HttpVersion="HTTP/1.1", charset="UTF-8", connection="close", userAgent=""):
+        path = ""
+        if host == URL_components.path.split("/")[0]:
+            # no protocol scheme  eg: "www.google.com"
+            length = 0
+            for i in URL_components.path.split("/"):
+                if len(i) != 0 :
+                    length += 1
+            if length == 1:
+                # requested for root
+                path = "/"
+            else: 
+                parts = URL_components.path.split("/")
+                path = URL_components.path[len(parts[0]):]
+        else:
+            if URL_components.path == "":
+                path = "/"
+            else:
+                path = URL_components.path
+        if userAgent == "":
+            userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+
+        return  "GET {path} {HttpVersion}\r\n"\
+                "Host: {host}\r\n"\
+                "Accept-Charset: {charset}\r\n"\
+                "User-Agent: {userAgent}\r\n"\
+                "Connection: {connection}\r\n\r\n".format(path=path, HttpVersion=HttpVersion, host=host, charset=charset, userAgent=userAgent, connection=connection)
+
+
+    def readResponse(self, socket):
+        # recieve all data from the socket
+        fullData = self.recvall(socket)
+        # make a copy of the data
+        fullDataOrigin = fullData
+        try: 
+            # try using UTF-8 to decode
+            fullData = fullData.decode()
+        except:
+            # if fail, then look for the charset format to decode
+            fullData = str(fullData)
+            # look for the encode format in the response header
+            charsetBegin = fullData.find("charset=")
+            index = charsetBegin + 8
+            charset = ""
+            while True:
+                if fullData[index] == '\\':
+                    break
+                charset += fullData[index]
+                index += 1
+            # decode 
+            fullData = fullDataOrigin.decode(charset)
+        return fullData
+        
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        # url parsing
+        URL_components = urllib.parse.urlparse(url)
+        # TCP connection
+        host = self.connect(URL_components)        
+        # send GET request
+        payload = self.GETRequestHeader(host, URL_components)
+        # print(payload)
+        # send
+        self.sendall(payload)
+        # read response
+        fullData = self.readResponse(self.socket)
+        # get code
+        code = self.get_code(fullData)
+        # get header
+        header = self.get_headers(fullData)
+        # get body
+        body = self.get_body(fullData)
+        # close the connection before return
+        self.close()
+        print("HTTP Response:")
+        # print(fullData)
+        print("Response status code: "+str(code))
+        print("Response body:\n"+body)
+        # print(header)
+        # print(len(header))
+        return HTTPResponse(code, fullData)
 
     def POST(self, url, args=None):
         code = 500
