@@ -132,7 +132,7 @@ class HTTPClient(object):
     def recvall(self, sock):
         """
         input: socket 
-        read   everything from the socket
+        read everything from the socket
         """
         buffer = bytearray()
         done = False
@@ -149,10 +149,10 @@ class HTTPClient(object):
                 done = not part
         return buffer
 
-    def GETRequestHeader(self, host, URL_components, HttpVersion="HTTP/1.1", charset="UTF-8", connection="close", userAgent=""):
+    def requestHeader(self, method, host, URL_components, contentType="text/plain", contentLength=0, userAgent="", connection="close", HttpVersion="HTTP/1.1", charset="utf-8"):
         """
-        input: all the necessary param for a GET request header (allow customize)
-        generate a GET request header string
+        input:  all the necessary param for a GET request header (allow customize)
+        return: generate a GET request header string
         """
         path = ""
         if host == URL_components.path.split("/")[0]:
@@ -175,11 +175,13 @@ class HTTPClient(object):
         if userAgent == "":
             userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko)"
 
-        return  "GET {path} {HttpVersion}\r\n"\
+        return  "{method} {path} {HttpVersion}\r\n"\
                 "Host: {host}\r\n"\
                 "Accept-Charset: {charset}\r\n"\
                 "User-Agent: {userAgent}\r\n"\
-                "Connection: {connection}\r\n\r\n".format(path=path, HttpVersion=HttpVersion, host=host, charset=charset, userAgent=userAgent, connection=connection)
+                "Content-Type: {contentType}; charset={charset}\r\n"\
+                "Content-Length: {contentLength}\r\n"\
+                "Connection: {connection}\r\n\r\n".format(method=method, path=path, HttpVersion=HttpVersion, host=host, charset=charset, userAgent=userAgent, contentType=contentType, contentLength=contentLength, connection=connection)
 
 
     def readResponse(self, socket):
@@ -209,10 +211,26 @@ class HTTPClient(object):
             # decode 
             fullData = fullDataOrigin.decode(charset)
         return fullData
-        
+    
+    def convertFormData(self, formData):
+        """
+        input:  formData
+        return: converted format in string
+        The format => "VariableOne=ValueOne&VariableTwo=ValueTwo"
+        """
+        data = ""
+        index = 0
+        l = len(formData.keys()) - 1
+        for key in formData.keys():
+            data += str(key) + "=" + str(formData[key])
+            if index != l:
+                data += "&"
+            index += 1
+        return data
 
     def GET(self, url, args=None):
         """
+        Note: the GET request body should be empty
         input: url
         Handling GET request to given url
         """
@@ -221,31 +239,52 @@ class HTTPClient(object):
         # TCP connection
         host = self.connect(URL_components)        
         # send GET request
-        payload = self.GETRequestHeader(host, URL_components)
-        # print(payload)
-        # send
+        payload = self.requestHeader("GET" ,host, URL_components)
         self.sendall(payload)
         # read response
         fullData = self.readResponse(self.socket)
         # get code
         code = self.get_code(fullData)
         # get header
-        header = self.get_headers(fullData)
+        # header = self.get_headers(fullData)
         # get body
         body = self.get_body(fullData)
         # close the connection before return
         self.close()
-        print("HTTP Response:")
-        # print(fullData)
+        print("---------------------------------HTTP Response---------------------------------")
         print("Response status code: "+str(code))
         print("Response body:\n"+body)
-        # print(header)
-        # print(len(header))
+        print("-------------------------------------------------------------------------------")
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
+        """
+        input: url and args as formData (formData should be in dictionary)
+        Handling POST request to given url
+        """
+        # url parsing
+        URL_components = urllib.parse.urlparse(url)
+        # TCP connection
+        host = self.connect(URL_components)  
+        # send POST request
+        contentLength = 0
+        if args != None:
+            # convert data into the format as the post body
+            POSTbody = self.convertFormData(args)
+            contentLength = len(POSTbody)
+        payload = self.requestHeader("POST", host, URL_components, contentType="application/x-www-form-urlencoded", contentLength=contentLength)
+        if args != None:
+            payload += POSTbody
+        # send 
+        self.sendall(payload)
+        # read Response
+        fullData = self.readResponse(self.socket)
+        # get code
+        code = self.get_code(fullData)
+        # get body
+        body = self.get_body(fullData)
+        # close the connection before return
+        self.close()
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
@@ -256,7 +295,6 @@ class HTTPClient(object):
     
 if __name__ == "__main__":
     client = HTTPClient()
-    command = "GET"
     if (len(sys.argv) <= 1):
         help()
         sys.exit(1)
