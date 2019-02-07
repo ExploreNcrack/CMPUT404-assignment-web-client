@@ -285,6 +285,10 @@ class HTTPClient(object):
         body = self.get_body(fullData)
         # close the connection before return
         self.close()
+        print("---------------------------------HTTP Response---------------------------------")
+        print("Response status code: "+str(code))
+        print("Response body:\n"+body)
+        print("-------------------------------------------------------------------------------")
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
